@@ -4,19 +4,19 @@ const HELP_CHANNEL_ID = 'C0C3YCC3WJV';
 
 const startApp = async () => {
 
-    console.log("Loaded ENV Keys:", {
-        SLACK_CLIENT_ID: process.env.SLACK_CLIENT_ID,
-        SLACK_SIGNING_SECRET: process.env.SLACK_SIGNING_SECRET,
-        SLACK_BOT_TOKEN: process.env.SLACK_BOT_TOKEN
-    });
-
     const { App } = await import('@slack/bolt');
+    const { OpenAI } = await import('openai');
 
     const app = new App({
         token: process.env.SLACK_BOT_TOKEN,
         signingSecret: process.env.SLACK_SIGNING_SECRET,
         socketMode: true,
         appToken: process.env.SLACK_APP_TOKEN
+    });
+
+    const client = new OpenAI({
+        apiKey: process.env.AI_API_KEY,
+        baseURL: "https://ai.hackclub.com/proxy/v1"
     });
 
     app.message(/.*/, async ({ message, say }) => {
@@ -33,16 +33,31 @@ const startApp = async () => {
 
             const targetMsg = message.thread_ts ? message.thread_ts : message.ts;
 
+            console.log(`Received message from user ${message.user} in channel ${message.channel}: ${message.text}`);
+
+            const response = await client.chat.completions.create({
+                model: 'openai/gpt-4o',
+                messages: [
+                    {
+                        role: 'user',
+                        content: message.text
+                    },
+                ],
+                stream: false
+            })
+
             await say({
-                text: `Heya <@${message.user}>! It's great to see that you came here for seeking help. A member of our team will reach out to you shortly. In the meantime, go make some freaking cool projects!`,
+                text: `Heya <@${message.user}>! ${response.choices[0].message.content}`,
                 thread_ts: targetMsg
             });
         }
-        
+
     });
 
     app.command('/hackalympics-ping', async ({ command, ack, say }) => {
+        const start = Date.now();
         await ack();
+        const latency = Date.now() - start;
         await say(`Heya, <@${command.user_id}>! Latency: ${latency}ms`);
     });
 
